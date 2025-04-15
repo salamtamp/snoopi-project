@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Shopee Auto Buyer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            width: 300px;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .error {
+            color: red;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>Enter Shopee URL</h3>
+    <input type="text" id="urlInput" placeholder="https://shopee.co.th/..." />
+    <div class="error" id="errorMsg"></div>
+    <button id="executeBtn">Execute</button>
+    <script src="popup.js"></script>
+</body>
+
+</html>
