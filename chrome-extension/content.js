@@ -13,16 +13,16 @@ const LOG_METHODS = {
 
 const CONFIG = {
   // General settings
-  MAX_RETRIES: 100,
-  RETRY_INTERVAL_MS: 500,
-  ADD_ITEM_TO_CART_DELAY_MS: 500,
-  CHECKOUT_CART_DELAY_MS: 500,
-  SEQUENCE_DELAY_MS: 500,
-  PLACE_ORDER_DELAY_MS: 1200,
+  MAX_RETRIES: 15,
+  RETRY_INTERVAL_MS: 300,
+  ADD_ITEM_TO_CART_DELAY_MS: 300,
+  CHECKOUT_CART_DELAY_MS: 300,
+  SEQUENCE_DELAY_MS: 300,
+  PLACE_ORDER_DELAY_MS: 900,
 
   // Button text configurations
   BUTTONS: {
-    BUY: ["Buy With Voucher", "Buy Now"],
+    BUY: ["Buy With Voucher", "Buy Now", "Buy"],
     CHECKOUT: ["Check Out"],
     PAYMENT: {
       METHOD: "ShopeePay",
@@ -31,7 +31,9 @@ const CONFIG = {
     },
   },
   LOG_LEVEL: 2, // error: 0, info: 1, debug: 2
-  STORAGE_KEYS: "shopeeUrls",
+  STORAGE_KEYS: "shopeeTasks",
+  SCHEDULED_URL_INTERVAL_MS: 3000,
+  DEBUG: true,
 };
 
 const displayLog = (level, msg) => {
@@ -51,6 +53,10 @@ const findAndClickButton = (texts) => {
   }
   return false;
 };
+
+function getCurrentUnixTimestamp() {
+  return Math.floor(Date.now() / 1000);
+}
 
 const performActionWithRetries = (actionFn, delay, maxRetries) => {
   return new Promise((resolve) => {
@@ -120,6 +126,10 @@ const purchaseItem = async () => {
     CONFIG.MAX_RETRIES
   );
 
+  if (CONFIG.DEBUG) {
+    return selectPaymentOption;
+  }
+
   if (!selectPaymentOption) return false;
 
   await new Promise((res) => setTimeout(res, CONFIG.PLACE_ORDER_DELAY_MS));
@@ -140,38 +150,74 @@ const main = async () => {
   displayLog("info", `Processing URL: ${currentURL}`);
 
   const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
-  const urlList = result.shopeeUrls;
+  const shopeeTasks = result.shopeeTasks;
 
-  if (!urlList || !urlList.urls.includes(currentURL)) {
-    displayLog("info", "Ignore this URL because it is not in the url list.");
+  console.log("shopeeTasks:", shopeeTasks);
+  // { tasks: [ { url: "https://shopee.co.th/...", status: "scheduled", runAt: 1744705482 }] }
+
+  const scheduledUrls = shopeeTasks.tasks
+    .filter(({ status }) => status !== "completed")
+    .map(({ url }) => url);
+
+  if (!scheduledUrls || !scheduledUrls.includes(currentURL)) {
+    displayLog(
+      "info",
+      "Ignore this URL because it is not in the scheduled list."
+    );
     return;
   }
 
-  const addedToCart = await addItemToCart();
-  if (!addedToCart) {
-    displayLog("error", "Failed to add item to cart.");
-    return;
+  const scheduledTask = shopeeTasks.tasks
+    .filter((task) => task.status === "scheduled")
+    .find((task) => task.url === currentURL);
+
+  if (scheduledTask && scheduledTask.status === "scheduled") {
+    const interval = setInterval(async () => {
+      const now = getCurrentUnixTimestamp();
+      const scheduledTime = scheduledTask.runAt;
+
+      if (now < scheduledTime) {
+        displayLog(
+          "info",
+          `Waiting for scheduled time: ${scheduledTime} remain: ${
+            scheduledTime - now
+          } seconds`
+        );
+      } else {
+        const addedToCart = await addItemToCart();
+        if (!addedToCart) {
+          displayLog("error", "Failed to add item to cart.");
+          return;
+        }
+
+        const checkedOut = await checkoutCart();
+        if (!checkedOut) {
+          displayLog("error", "Failed to checkout cart.");
+          return;
+        }
+
+        const purchased = await purchaseItem();
+        if (!purchased) {
+          displayLog("error", "Failed to complete purchase.");
+          return;
+        }
+
+        await chrome.storage.local.set({
+          shopeeTasks: {
+            tasks: shopeeTasks.tasks.map((task) => {
+              if (task.id === scheduledTask.id) {
+                return { ...task, status: "completed" };
+              }
+              return task;
+            }),
+          },
+        });
+
+        clearInterval(interval);
+        displayLog("info", "Purchase completed successfully!");
+      }
+    }, CONFIG.SCHEDULED_URL_INTERVAL_MS);
   }
-
-  const checkedOut = await checkoutCart();
-  if (!checkedOut) {
-    displayLog("error", "Failed to checkout cart.");
-    return;
-  }
-
-  const purchased = await purchaseItem();
-  if (!purchased) {
-    displayLog("error", "Failed to complete purchase.");
-    return;
-  }
-
-  await chrome.storage.local.set({
-    shopeeUrls: {
-      urls: urlList.urls.filter((url) => url !== currentURL),
-    },
-  });
-
-  displayLog("info", "Purchase completed successfully!");
 };
 
 console.log("script executed!");

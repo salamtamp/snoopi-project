@@ -1,3 +1,7 @@
+function generateTaskID() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
 document.getElementById("executeBtn").addEventListener("click", async () => {
   const url = document.getElementById("urlInput").value.trim();
   const errorMsg = document.getElementById("errorMsg");
@@ -9,12 +13,31 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
 
   errorMsg.textContent = "";
 
-  const result = await chrome.storage.local.get("shopeeUrls");
-  const existingUrls = result.shopeeUrls || { urls: [] };
+  const result = await chrome.storage.local.get("shopeeTasks");
+  const shopeeTasks = result.shopeeTasks || { tasks: [] };
+  const scheduledUrls = shopeeTasks.tasks
+    .filter(({ status }) => status !== "completed")
+    .map(({ url }) => url);
 
-  if (!existingUrls.urls.includes(url)) {
-    existingUrls.urls.push(url);
-    await chrome.storage.local.set({ shopeeUrls: existingUrls });
+  console.log("scheduledUrls:", scheduledUrls);
+  // { tasks: [ { id: "123", url: "https://shopee.co.th/...", status: "scheduled", runAt: 1744705482 }] }
+
+  if (!scheduledUrls.includes(url)) {
+    updatedShopeeTasks = {
+      tasks: [
+        ...shopeeTasks.tasks,
+        {
+          id: generateTaskID(),
+          url,
+          status: "scheduled",
+          runAt: Math.floor((Date.now() + 2 * 60 * 1000) / 1000),
+        },
+      ],
+    };
+
+    console.log("updatedShopeeTasks:", updatedShopeeTasks);
+
+    await chrome.storage.local.set({ shopeeTasks: updatedShopeeTasks });
   }
 
   chrome.tabs.create({ url }, (tab) => {
