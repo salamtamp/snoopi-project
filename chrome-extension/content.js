@@ -170,7 +170,7 @@ const main = async () => {
   displayLog("info", `Processing URL: ${currentURL}`);
 
   const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
-  const shopeeTasks = result.shopeeTasks;
+  const shopeeTasks = result.shopeeTasks || { tasks: [] };
 
   const scheduledUrls = shopeeTasks.tasks
     .filter(({ status }) => status !== "completed")
@@ -232,6 +232,8 @@ const main = async () => {
           return;
         }
 
+        const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
+        const shopeeTasks = result.shopeeTasks;
         await chrome.storage.local.set({
           shopeeTasks: {
             tasks: shopeeTasks.tasks.map((task) => {
