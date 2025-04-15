@@ -49,9 +49,10 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
     }
     runAtTimestamp = Math.floor(selectedDate.getTime() / 1000);
   } else {
-    runAtTimestamp = Math.floor((Date.now() + 2 * 60 * 1000) / 1000);
+    runAtTimestamp = Math.floor(Date.now() / 1000);
   }
 
+  const keyword = document.getElementById("keywordInput").value.trim();
   const result = await chrome.storage.local.get("shopeeTasks");
   const shopeeTasks = result.shopeeTasks || { tasks: [] };
   const scheduledUrls = shopeeTasks.tasks
@@ -67,6 +68,7 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
           url,
           status: "scheduled",
           runAt: runAtTimestamp,
+          keyword: keyword || "",
         },
       ],
     };

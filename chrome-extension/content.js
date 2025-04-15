@@ -16,8 +16,8 @@ const CONFIG = {
   MAX_RETRIES: 30,
   RETRY_INTERVAL_MS: 300,
   ADD_ITEM_TO_CART_DELAY_MS: 300,
-  CHECKOUT_CART_DELAY_MS: 300,
-  SEQUENCE_DELAY_MS: 300,
+  CHECKOUT_CART_DELAY_MS: 500,
+  SEQUENCE_DELAY_MS: 500,
   PLACE_ORDER_DELAY_MS: 900,
 
   // Button text configurations
@@ -86,7 +86,22 @@ const performActionWithRetries = (actionName, actionFn, delay, maxRetries) => {
   });
 };
 
-// Step 1: Add item to cart
+// Step 1: Select item (if keyword is exist)
+const selectItemByKeyword = (keyword) => {
+  if (keyword) {
+    displayLog("info", `Select item with keyword: ${keyword}`);
+    return performActionWithRetries(
+      "selectItemByKeyword",
+      () => findAndClickButton([keyword]),
+      CONFIG.ADD_ITEM_TO_CART_DELAY_MS,
+      CONFIG.MAX_RETRIES
+    );
+  } else {
+    return true;
+  }
+};
+
+// Step 2: Add item to cart
 const addItemToCart = () => {
   displayLog("info", "Attempting to add item to cart...");
   return performActionWithRetries(
@@ -97,7 +112,7 @@ const addItemToCart = () => {
   );
 };
 
-// Step 2: Checkout cart
+// Step 3: Checkout cart
 const checkoutCart = () => {
   displayLog("info", "Attempting to checkout cart...");
   return performActionWithRetries(
@@ -108,7 +123,7 @@ const checkoutCart = () => {
   );
 };
 
-// Step 3: Purchase item
+// Step 4: Purchase item
 const purchaseItem = async () => {
   displayLog("info", "Attempting to purchase item...");
 
@@ -192,6 +207,12 @@ const main = async () => {
       } else {
         status = "processing";
         clearInterval(interval);
+
+        const selectedItem = await selectItemByKeyword(scheduledTask.keyword);
+        if (!selectedItem) {
+          displayLog("error", "Failed to select item.");
+          return;
+        }
 
         const addedToCart = await addItemToCart();
         if (!addedToCart) {
