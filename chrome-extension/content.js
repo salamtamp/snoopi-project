@@ -13,7 +13,7 @@ const LOG_METHODS = {
 
 const CONFIG = {
   // General settings
-  MAX_RETRIES: 15,
+  MAX_RETRIES: 30,
   RETRY_INTERVAL_MS: 300,
   ADD_ITEM_TO_CART_DELAY_MS: 300,
   CHECKOUT_CART_DELAY_MS: 300,
@@ -22,7 +22,7 @@ const CONFIG = {
 
   // Button text configurations
   BUTTONS: {
-    BUY: ["Buy With Voucher", "Buy Now", "Buy"],
+    BUY: ["Buy With Voucher", "Buy Now"],
     CHECKOUT: ["Check Out"],
     PAYMENT: {
       METHOD: "ShopeePay",
@@ -32,8 +32,8 @@ const CONFIG = {
   },
   LOG_LEVEL: 2, // error: 0, info: 1, debug: 2
   STORAGE_KEYS: "shopeeTasks",
-  SCHEDULED_URL_INTERVAL_MS: 3000,
-  DEBUG: true,
+  SCHEDULED_URL_INTERVAL_MS: 1000,
+  DEBUG: false,
 };
 
 const displayLog = (level, msg) => {
@@ -58,13 +58,13 @@ function getCurrentUnixTimestamp() {
   return Math.floor(Date.now() / 1000);
 }
 
-const performActionWithRetries = (actionFn, delay, maxRetries) => {
+const performActionWithRetries = (actionName, actionFn, delay, maxRetries) => {
   return new Promise((resolve) => {
     let retries = 0;
 
     const attempt = () => {
       try {
-        displayLog("info", `retries: ${retries}`);
+        displayLog("info", `${actionName} retries: ${retries}`);
 
         if (actionFn()) {
           resolve(true);
@@ -90,6 +90,7 @@ const performActionWithRetries = (actionFn, delay, maxRetries) => {
 const addItemToCart = () => {
   displayLog("info", "Attempting to add item to cart...");
   return performActionWithRetries(
+    "addItemToCart",
     () => findAndClickButton(CONFIG.BUTTONS.BUY),
     CONFIG.ADD_ITEM_TO_CART_DELAY_MS,
     CONFIG.MAX_RETRIES
@@ -100,6 +101,7 @@ const addItemToCart = () => {
 const checkoutCart = () => {
   displayLog("info", "Attempting to checkout cart...");
   return performActionWithRetries(
+    "checkoutCart",
     () => findAndClickButton(CONFIG.BUTTONS.CHECKOUT),
     CONFIG.CHECKOUT_CART_DELAY_MS,
     CONFIG.MAX_RETRIES
@@ -111,6 +113,7 @@ const purchaseItem = async () => {
   displayLog("info", "Attempting to purchase item...");
 
   const selectPaymentMethod = await performActionWithRetries(
+    "selectPaymentMethod",
     () => findAndClickButton([CONFIG.BUTTONS.PAYMENT.METHOD]),
     CONFIG.RETRY_INTERVAL_MS,
     CONFIG.MAX_RETRIES
@@ -121,20 +124,22 @@ const purchaseItem = async () => {
   await new Promise((res) => setTimeout(res, CONFIG.SEQUENCE_DELAY_MS));
 
   const selectPaymentOption = await performActionWithRetries(
+    "selectPaymentOption",
     () => findAndClickButton([CONFIG.BUTTONS.PAYMENT.OPTION]),
     CONFIG.RETRY_INTERVAL_MS,
     CONFIG.MAX_RETRIES
   );
 
-  if (CONFIG.DEBUG) {
-    return selectPaymentOption;
-  }
-
   if (!selectPaymentOption) return false;
+
+  if (CONFIG.DEBUG) {
+    return true;
+  }
 
   await new Promise((res) => setTimeout(res, CONFIG.PLACE_ORDER_DELAY_MS));
 
   const confirmPurchase = await performActionWithRetries(
+    "confirmPurchase",
     () => findAndClickButton([CONFIG.BUTTONS.PAYMENT.CONFIRM]),
     CONFIG.RETRY_INTERVAL_MS,
     CONFIG.MAX_RETRIES
@@ -151,9 +156,6 @@ const main = async () => {
 
   const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
   const shopeeTasks = result.shopeeTasks;
-
-  console.log("shopeeTasks:", shopeeTasks);
-  // { tasks: [ { url: "https://shopee.co.th/...", status: "scheduled", runAt: 1744705482 }] }
 
   const scheduledUrls = shopeeTasks.tasks
     .filter(({ status }) => status !== "completed")
@@ -176,6 +178,8 @@ const main = async () => {
       const now = getCurrentUnixTimestamp();
       const scheduledTime = scheduledTask.runAt;
 
+      let status = "scheduled";
+
       if (now < scheduledTime) {
         displayLog(
           "info",
@@ -183,7 +187,12 @@ const main = async () => {
             scheduledTime - now
           } seconds`
         );
+      } else if (status === "processing") {
+        displayLog("info", `Processing...`);
       } else {
+        status = "processing";
+        clearInterval(interval);
+
         const addedToCart = await addItemToCart();
         if (!addedToCart) {
           displayLog("error", "Failed to add item to cart.");
@@ -213,12 +222,11 @@ const main = async () => {
           },
         });
 
-        clearInterval(interval);
         displayLog("info", "Purchase completed successfully!");
       }
     }, CONFIG.SCHEDULED_URL_INTERVAL_MS);
   }
 };
 
-console.log("script executed!");
+displayLog("info", "script executed!");
 main();
