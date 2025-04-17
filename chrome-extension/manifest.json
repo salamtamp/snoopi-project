@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Shopee Auto Buyer",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "permissions": ["tabs", "scripting", "activeTab", "storage"],
   "host_permissions": ["https://shopee.co.th/*"],
   "action": {
