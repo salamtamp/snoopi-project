@@ -36,6 +36,11 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
     return;
   }
 
+  if (quantity < 1 || quantity > 10) {
+    quantityErrorMsg.textContent = "Quantity must be between 1 and 10.";
+    return;
+  }
+
   let runAtTimestamp;
   if (scheduleTimeInput) {
     const selectedDate = new Date(scheduleTimeInput);
@@ -53,6 +58,7 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
   }
 
   const keyword = document.getElementById("keywordInput").value.trim();
+  const quantity = document.getElementById("quantityInput").value.trim();
   const result = await chrome.storage.local.get("shopeeTasks");
   const shopeeTasks = result.shopeeTasks || { tasks: [] };
   const scheduledUrls = shopeeTasks.tasks
@@ -69,6 +75,7 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
           status: "scheduled",
           runAt: runAtTimestamp,
           keyword: keyword || "",
+          quantity: quantity || 1,
         },
       ],
     };

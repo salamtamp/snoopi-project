@@ -16,6 +16,7 @@ const CONFIG = {
   MAX_RETRIES: 30,
   RETRY_INTERVAL_MS: 300,
   ADD_ITEM_TO_CART_DELAY_MS: 300,
+  INCREASE_QUANTITY_ON_ITEM_DELAY_MS: 200,
   CHECKOUT_CART_DELAY_MS: 500,
   SEQUENCE_DELAY_MS: 500,
   PLACE_ORDER_DELAY_MS: 900,
@@ -23,6 +24,7 @@ const CONFIG = {
   // Button text configurations
   BUTTONS: {
     BUY: ["Buy With Voucher", "Buy Now"],
+    QUANTITY: ["Increase"],
     CHECKOUT: ["Check Out"],
     PAYMENT: {
       METHOD: "ShopeePay",
@@ -45,7 +47,7 @@ const findAndClickButton = (texts) => {
   const buttons = document.querySelectorAll("button");
   for (const btn of buttons) {
     for (const text of texts) {
-      if (btn.innerText.includes(text)) {
+      if (btn.innerText?.includes(text) || btn.ariaLabel?.includes(text)) {
         btn.click();
         return true;
       }
@@ -101,7 +103,36 @@ const selectItemByKeyword = (keyword) => {
   }
 };
 
-// Step 2: Add item to cart
+// Step 2: Increase quantity
+const increaseQuantity = async (quantity) => {
+  if (!quantity || quantity === 1) {
+    return true;
+  }
+
+  displayLog("info", `Attempting to increase quantity by ${quantity}...`);
+  for (let i = 0; i < quantity - 1; i++) {
+    const success = await performActionWithRetries(
+      `increaseQuantity_${i + 1}`, // Unique name for logging
+      () => findAndClickButton(CONFIG.BUTTONS.QUANTITY),
+      CONFIG.INCREASE_QUANTITY_ON_ITEM_DELAY_MS,
+      CONFIG.MAX_RETRIES
+    );
+
+    if (!success) {
+      displayLog("error", `Failed to increase quantity at step ${i + 1}.`);
+      return false;
+    }
+    displayLog(
+      "debug",
+      `Quantity increased step ${i + 1}/${quantity} succeeded.`
+    );
+  }
+
+  displayLog("info", `Successfully increased quantity by ${quantity}.`);
+  return true;
+};
+
+// Step 3: Add item to cart
 const addItemToCart = () => {
   displayLog("info", "Attempting to add item to cart...");
   return performActionWithRetries(
@@ -112,7 +143,7 @@ const addItemToCart = () => {
   );
 };
 
-// Step 3: Checkout cart
+// Step 4: Checkout cart
 const checkoutCart = () => {
   displayLog("info", "Attempting to checkout cart...");
   return performActionWithRetries(
@@ -123,7 +154,7 @@ const checkoutCart = () => {
   );
 };
 
-// Step 4: Purchase item
+// Step 5: Purchase item
 const purchaseItem = async () => {
   displayLog("info", "Attempting to purchase item...");
 
@@ -211,6 +242,14 @@ const main = async () => {
         const selectedItem = await selectItemByKeyword(scheduledTask.keyword);
         if (!selectedItem) {
           displayLog("error", "Failed to select item.");
+          return;
+        }
+
+        const increasedQuantity = await increaseQuantity(
+          scheduledTask.quantity || 1
+        );
+        if (!increasedQuantity) {
+          displayLog("error", "Failed to increase quantity.");
           return;
         }
 
