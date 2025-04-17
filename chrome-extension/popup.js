@@ -2,6 +2,10 @@ function generateTaskID() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 }
 
+function formatShopeeUrl(url) {
+  return url.split("?")[0];
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   const scheduleTimeInput = document.getElementById("scheduleTimeInput");
 
@@ -64,15 +68,15 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
   const shopeeTasks = result.shopeeTasks || { tasks: [] };
   const scheduledUrls = shopeeTasks.tasks
     .filter(({ status }) => status !== "completed")
-    .map(({ url }) => url);
+    .map(({ url }) => formatShopeeUrl(url));
 
-  if (!scheduledUrls.includes(url)) {
+  if (!scheduledUrls.includes(formatShopeeUrl(url))) {
     const updatedShopeeTasks = {
       tasks: [
         ...shopeeTasks.tasks,
         {
           id: generateTaskID(),
-          url,
+          url: formatShopeeUrl(url),
           status: "scheduled",
           runAt: runAtTimestamp,
           keyword: keyword || "",
@@ -86,8 +90,8 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
     errorMsg.textContent = "This URL is already scheduled.";
   }
 
-  if (!scheduledUrls.includes(url)) {
-    chrome.tabs.create({ url }, (tab) => {
+  if (!scheduledUrls.includes(formatShopeeUrl(url))) {
+    chrome.tabs.create({ url: formatShopeeUrl(url) }, (tab) => {
       const checkTabReady = () => {
         try {
           chrome.tabs.get(tab.id, (updatedTab) => {

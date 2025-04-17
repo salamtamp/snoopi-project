@@ -60,6 +60,10 @@ function getCurrentUnixTimestamp() {
   return Math.floor(Date.now() / 1000);
 }
 
+function formatShopeeUrl(url) {
+  return url.split("?")[0];
+}
+
 const performActionWithRetries = (actionName, actionFn, delay, maxRetries) => {
   return new Promise((resolve) => {
     let retries = 0;
@@ -194,101 +198,175 @@ const purchaseItem = async () => {
   return confirmPurchase;
 };
 
-const main = async () => {
-  displayLog("info", "Starting Shopee checkout automation...");
+const waitForContentLoaded = () => {
+  return new Promise((resolve) => {
+    if (document.readyState === "complete") {
+      resolve();
+    } else {
+      window.addEventListener("load", resolve);
+    }
+  });
+};
 
-  const currentURL = window.location.href;
-  displayLog("info", `Processing URL: ${currentURL}`);
-
-  const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
-  const shopeeTasks = result.shopeeTasks || { tasks: [] };
-
-  const scheduledUrls = shopeeTasks.tasks
-    .filter(({ status }) => status !== "completed")
-    .map(({ url }) => url);
-
-  if (!scheduledUrls || !scheduledUrls.includes(currentURL)) {
-    displayLog(
-      "info",
-      "Ignore this URL because it is not in the scheduled list."
-    );
-    return;
-  }
-
-  const scheduledTask = shopeeTasks.tasks
-    .filter((task) => task.status === "scheduled")
-    .find((task) => task.url === currentURL);
-
-  if (scheduledTask && scheduledTask.status === "scheduled") {
-    const interval = setInterval(async () => {
-      const now = getCurrentUnixTimestamp();
-      const scheduledTime = scheduledTask.runAt;
-
-      let status = "scheduled";
-
-      if (now < scheduledTime) {
-        displayLog(
-          "info",
-          `Waiting for scheduled time: ${scheduledTime} remain: ${
-            scheduledTime - now
-          } seconds`
-        );
-      } else if (status === "processing") {
-        displayLog("info", `Processing...`);
-      } else {
-        status = "processing";
-        clearInterval(interval);
-
-        const selectedItem = await selectItemByKeyword(scheduledTask.keyword);
-        if (!selectedItem) {
-          displayLog("error", "Failed to select item.");
-          return;
-        }
-
-        const increasedQuantity = await increaseQuantity(
-          scheduledTask.quantity || 1
-        );
-        if (!increasedQuantity) {
-          displayLog("error", "Failed to increase quantity.");
-          return;
-        }
-
-        const addedToCart = await addItemToCart();
-        if (!addedToCart) {
-          displayLog("error", "Failed to add item to cart.");
-          return;
-        }
-
-        const checkedOut = await checkoutCart();
-        if (!checkedOut) {
-          displayLog("error", "Failed to checkout cart.");
-          return;
-        }
-
-        const purchased = await purchaseItem();
-        if (!purchased) {
-          displayLog("error", "Failed to complete purchase.");
-          return;
-        }
-
-        const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
-        const shopeeTasks = result.shopeeTasks;
-        await chrome.storage.local.set({
-          shopeeTasks: {
-            tasks: shopeeTasks.tasks.map((task) => {
-              if (task.id === scheduledTask.id) {
-                return { ...task, status: "completed" };
-              }
-              return task;
-            }),
-          },
-        });
-
-        displayLog("info", "Purchase completed successfully!");
+// Helper to update task status in storage
+const updateTaskStatus = async (taskId, status) => {
+  try {
+    const result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
+    const shopeeTasks = result.shopeeTasks || { tasks: [] };
+    const updatedTasks = shopeeTasks.tasks.map((task) => {
+      if (task.id === taskId) {
+        displayLog("info", `Updating task ${taskId} status to ${status}`);
+        return { ...task, status };
       }
-    }, CONFIG.SCHEDULED_URL_INTERVAL_MS);
+      return task;
+    });
+    await chrome.storage.local.set({ shopeeTasks: { tasks: updatedTasks } });
+    displayLog("debug", `Task ${taskId} status updated successfully.`);
+    return true;
+  } catch (error) {
+    displayLog("error", `Failed to update task ${taskId} status: ${error}`);
+    return false;
   }
 };
 
-displayLog("info", "script executed!");
-main();
+// Function to execute the purchase sequence
+const runPurchaseFlow = async (task) => {
+  displayLog("info", `Running purchase flow for task ${task.id}`);
+
+  const selectedItem = await selectItemByKeyword(task.keyword);
+  if (!selectedItem) {
+    displayLog("error", "Failed to select item.");
+    await updateTaskStatus(task.id, "failed");
+    return false;
+  }
+
+  const increasedQuantity = await increaseQuantity(task.quantity || 1);
+  if (!increasedQuantity) {
+    displayLog("error", "Failed to increase quantity.");
+    await updateTaskStatus(task.id, "failed");
+    return false;
+  }
+
+  const addedToCart = await addItemToCart();
+  if (!addedToCart) {
+    displayLog("error", "Failed to add item to cart.");
+    await updateTaskStatus(task.id, "failed");
+    return false;
+  }
+
+  // Short delay before checkout might be needed if cart updates are slow
+  await new Promise((res) => setTimeout(res, CONFIG.SEQUENCE_DELAY_MS));
+
+  const checkedOut = await checkoutCart();
+  if (!checkedOut) {
+    displayLog("error", "Failed to checkout cart.");
+    await updateTaskStatus(task.id, "failed");
+    return false;
+  }
+
+  // Short delay before purchase might be needed
+  await new Promise((res) => setTimeout(res, CONFIG.SEQUENCE_DELAY_MS));
+
+  const purchased = await purchaseItem();
+  if (!purchased) {
+    displayLog("error", "Failed to complete purchase.");
+    await updateTaskStatus(task.id, "failed");
+    return false;
+  }
+
+  await updateTaskStatus(task.id, "completed");
+  displayLog("info", `Task ${task.id} completed successfully!`);
+  return true;
+};
+
+// Main function to check and run scheduled tasks
+const checkAndRunTask = async () => {
+  displayLog("info", "Checking for scheduled tasks...");
+
+  const currentURL = formatShopeeUrl(window.location.href);
+  displayLog("info", `Processing URL: ${currentURL}`);
+
+  let result;
+  try {
+    result = await chrome.storage.local.get(CONFIG.STORAGE_KEYS);
+  } catch (error) {
+    displayLog("error", `Error getting tasks from storage: ${error}`);
+    return; // Exit if storage is inaccessible
+  }
+
+  const shopeeTasks = result.shopeeTasks || { tasks: [] };
+
+  // Find the task matching the current URL that is not completed or failed
+  const scheduledTask = shopeeTasks.tasks.find(
+    (task) =>
+      task.url === currentURL &&
+      task.status !== "completed" &&
+      task.status !== "failed"
+  );
+
+  if (!scheduledTask) {
+    displayLog("info", "No active scheduled task found for this URL.");
+    return;
+  }
+
+  displayLog(
+    "info",
+    `Found task ${scheduledTask.id} with status ${scheduledTask.status}`
+  );
+
+  const now = getCurrentUnixTimestamp();
+  const scheduledTime = scheduledTask.runAt;
+
+  if (now < scheduledTime) {
+    const delay = (scheduledTime - now) * 1000;
+    displayLog(
+      "info",
+      `Task ${
+        scheduledTask.id
+      } scheduled for ${scheduledTime}. Waiting for ${Math.round(
+        delay / 1000
+      )} seconds.`
+    );
+
+    setTimeout(checkAndRunTask, Math.max(delay + 100, 1000));
+    return;
+  }
+
+  // Time is up, process the task based on status
+  if (scheduledTask.status === "scheduled") {
+    displayLog(
+      "info",
+      `Task ${scheduledTask.id} time is up. Updating status to processing and reloading.`
+    );
+    const statusUpdated = await updateTaskStatus(
+      scheduledTask.id,
+      "processing"
+    );
+    if (statusUpdated) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      location.reload();
+    } else {
+      displayLog(
+        "error",
+        "Failed to update task status before reload. Aborting."
+      );
+    }
+  } else if (scheduledTask.status === "processing") {
+    displayLog(
+      "info",
+      `Task ${scheduledTask.id} is in processing state. Running purchase flow.`
+    );
+
+    await waitForContentLoaded();
+    displayLog("info", "Page content loaded successfully after reload.");
+    await runPurchaseFlow(scheduledTask);
+  } else {
+    displayLog(
+      "warning",
+      `Task ${scheduledTask.id} has unexpected status: ${scheduledTask.status}`
+    );
+  }
+};
+
+displayLog("info", "Script executed!");
+checkAndRunTask();
