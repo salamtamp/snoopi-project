@@ -31,12 +31,15 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
   errorMsg.textContent = "";
   scheduleErrorMsg.textContent = "";
 
+  const keyword = document.getElementById("keywordInput").value.trim();
+  const quantity = document.getElementById("quantityInput").value.trim();
+
   if (!/^https:\/\/shopee\.co\.th\/.+/.test(url)) {
     errorMsg.textContent = "Please enter a valid Shopee URL.";
     return;
   }
 
-  if (quantity < 1 || quantity > 10) {
+  if (+quantity < 1 || +quantity > 10) {
     quantityErrorMsg.textContent = "Quantity must be between 1 and 10.";
     return;
   }
@@ -57,8 +60,6 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
     runAtTimestamp = Math.floor(Date.now() / 1000);
   }
 
-  const keyword = document.getElementById("keywordInput").value.trim();
-  const quantity = document.getElementById("quantityInput").value.trim();
   const result = await chrome.storage.local.get("shopeeTasks");
   const shopeeTasks = result.shopeeTasks || { tasks: [] };
   const scheduledUrls = shopeeTasks.tasks
