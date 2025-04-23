@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "captcha-resolver-api"
+version = "0.1.0"
+description = ""
+authors = ["Patchara Suwanwanakul <patcharas@cariva.co.th>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.12"
+uvicorn = "^0.34.1"
+opencv-python = "^4.11.0.86"
+numpy = "^2.2.4"
+python-multipart = "^0.0.20"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

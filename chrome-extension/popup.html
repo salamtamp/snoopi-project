@@ -48,8 +48,15 @@
     <h3>Schedule Time (Optional)</h3>
     <input type="datetime-local" id="scheduleTimeInput" />
     <div class="error" id="scheduleErrorMsg"></div>
+
+    <h3>Calibration Time (Optional)</h3>
+    <input type="number" id="calibrationTimeInput" min="0" max="10000" placeholder="Enter your calibration time (ms)..."
+        value="1500" />
+    <div class="error" id="calibrationTimeErrorMsg"></div>
+
     <button id="executeBtn">Execute</button>
     <script src="popup.js"></script>
+
 </body>
 
 </html>

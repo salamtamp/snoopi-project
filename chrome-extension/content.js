@@ -35,6 +35,7 @@ const CONFIG = {
   LOG_LEVEL: 2, // error: 0, info: 1, debug: 2
   STORAGE_KEYS: "shopeeTasks",
   SCHEDULED_URL_INTERVAL_MS: 1000,
+  CALIBRATION_TIME_MS: 1500,
   DEBUG: false,
 };
 
@@ -58,6 +59,32 @@ const findAndClickButton = (texts) => {
 
 function getCurrentUnixTimestamp() {
   return Math.floor(Date.now() / 1000);
+}
+
+async function getCurrentUnixTimestampFromWorldClockAPI() {
+  try {
+    const response = await fetch(
+      "https://timeapi.io/api/time/current/zone?timeZone=UTC"
+    );
+    const data = await response.json();
+    console.log(JSON.stringify(data));
+    const date = new Date(
+      Date.UTC(
+        data.year,
+        data.month - 1,
+        data.day,
+        data.hour,
+        data.minute,
+        data.seconds,
+        data.milliSeconds
+      )
+    );
+
+    const unixTimestamp = Math.floor(date.getTime() / 1000);
+    return unixTimestamp;
+  } catch (error) {
+    return getCurrentUnixTimestamp();
+  }
 }
 
 function formatShopeeUrl(url) {
@@ -314,11 +341,11 @@ const checkAndRunTask = async () => {
     `Found task ${scheduledTask.id} with status ${scheduledTask.status}`
   );
 
-  const now = getCurrentUnixTimestamp();
+  const now = await getCurrentUnixTimestampFromWorldClockAPI();
   const scheduledTime = scheduledTask.runAt;
 
   if (now < scheduledTime) {
-    const delay = (scheduledTime - now) * 1000;
+    const delay = (scheduledTime - now) * 1000 - scheduledTask.calibrationTime;
     displayLog(
       "info",
       `Task ${
@@ -328,7 +355,7 @@ const checkAndRunTask = async () => {
       )} seconds.`
     );
 
-    setTimeout(checkAndRunTask, Math.max(delay + 100, 1000));
+    setTimeout(checkAndRunTask, Math.min(delay, 30000));
     return;
   }
 

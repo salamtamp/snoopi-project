@@ -48,6 +48,15 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
     return;
   }
 
+  const calibrationTime = document
+    .getElementById("calibrationTimeInput")
+    .value.trim();
+  if (+calibrationTime < 0 || +calibrationTime > 10000) {
+    calibrationTimeErrorMsg.textContent =
+      "Calibration time must be between 0 and 10000 (ms).";
+    return;
+  }
+
   let runAtTimestamp;
   if (scheduleTimeInput) {
     const selectedDate = new Date(scheduleTimeInput);
@@ -81,6 +90,7 @@ document.getElementById("executeBtn").addEventListener("click", async () => {
           runAt: runAtTimestamp,
           keyword: keyword || "",
           quantity: quantity || 1,
+          calibrationTime: calibrationTime || 1500,
         },
       ],
     };
