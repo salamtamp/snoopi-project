@@ -35,7 +35,6 @@ const CONFIG = {
   LOG_LEVEL: 2, // error: 0, info: 1, debug: 2
   STORAGE_KEYS: "shopeeTasks",
   SCHEDULED_URL_INTERVAL_MS: 1000,
-  CALIBRATION_TIME_MS: 1500,
   DEBUG: false,
 };
 
